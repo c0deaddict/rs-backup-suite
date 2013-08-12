@@ -196,7 +196,8 @@ get_processed_passwd_file() {
 	cat /etc/passwd | while read line; do
 		uid=$(echo -n "${line}" | cut -d ":" -f 3)
 		
-		if [ $uid -lt 1000 ]; then
+        # ignore all UID < 1000 and the user 'nobody' on debian
+		if [ $uid -lt 1000 ] || [ $uid -eq 65534 ]; then
 			continue
 		fi
 

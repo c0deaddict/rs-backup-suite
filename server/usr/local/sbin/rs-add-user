@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 ##
 # rs-add-user
 # Copyright (C) 2013 by Janek Bevendorff
@@ -46,6 +46,10 @@ chown root:root "${HOME_DIR}/rsync.conf"
 chmod 0644 "${HOME_DIR}/rsync.conf"
 chown root:root "${HOME_DIR}/rsnapshot.conf"
 chmod 0644 "${HOME_DIR}/rsnapshot.conf"
+
+# Make .sync directory
+mkdir -p "${HOME_DIR}/${FILES_DIR}/.sync"
+chown ${local_username}:${local_username} -R "${HOME_DIR}/${FILES_DIR}"
 
 # If SSH key file has been specified
 if [ "${ssh_key_file}" != "" ]; then
