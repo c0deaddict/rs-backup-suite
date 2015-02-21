@@ -24,7 +24,8 @@ REMOTE_USER="%h-%u"
 #SSH_OPTIONS="-C -i .ssh/id_rsa"
 
 # Additional options for rsync
-#RSYNC_OPTIONS=""
+RSYNC_OPTIONS="--acls --hard-links --xattrs"
+#RSYNC_OPTIONS="--hard-links --xattrs"
 
 # Global log file to use when running as root
 LOG_FILE="/var/log/rs-backup.log"
@@ -53,3 +54,6 @@ PRINT_ERRORS=true
 
 # Send warnings to STDERR (implies PRINT_ERRORS=true)
 PRINT_WARNINGS=true
+
+# Show desktop notifications. Requires libnotify / notify-send.
+DESKTOP_NOTIFICATIONS=true

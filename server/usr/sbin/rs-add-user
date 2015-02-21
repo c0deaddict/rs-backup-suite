@@ -1,0 +1,123 @@
+#!/bin/sh
+##
+# Copyright (C) 2013-2014 Janek Bevendorff
+# Website: http://www.refining-linux.org/
+# 
+# Set up a backup user.
+# 
+# The MIT License (MIT)
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in
+# all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+# THE SOFTWARE.
+##
+if [ "$1" == "" ] || [ "$2" == "" ]; then
+	. rs-version
+	echo "Usage: $(basename $0) <remote host> <remote username> [<ssh public key file>]"
+	exit
+fi
+
+. /etc/rs-backup/server-config
+
+remote_hostname="$1"
+remote_username="$2"
+ssh_key_file="$3"
+local_username="${remote_hostname}-${remote_username}"
+
+# config template variables
+USERNAME="${local_username}"
+GROUPNAME="${local_username}"
+HOME_DIR="${BACKUP_ROOT}/${local_username}"
+
+# Detect distribution
+distribution=$(rs-detect-distribution)
+
+# Synology DSM
+if [[ "Synology" == ${distribution} ]]; then
+	GROUPNAME="users"
+	
+	# Create group if it does not exist
+	synogroup --get "${USER_GROUP}" > /dev/null 2>&1
+	if [ $? -ne 0 ]; then
+		synogroup --add "${USER_GROUP}" > /dev/null
+		synogroup --descset "${USER_GROUP}" "rs-backup group" > /dev/null
+	fi
+
+	# Create (disabled) user 
+	synouser --add "${USERNAME}" "" "" 1 "" 0
+	sed -i "s:^\(${USERNAME/./\\.}\)\:[^\:]*\::\1\:*\::" /etc/shadow
+
+	# Re-enable user, set description
+	synouser --modify "${USERNAME}" "rs-backup user" 0 ""
+
+	# Add user to group (Synology Y U so complicated?!)
+	members=$(synogroup --get "${USER_GROUP}" | grep -o "^[0-9]\+:\[.\+\]\$" | sed "s/[0-9]\+:\[\(.\+\)\]/\1/g")
+	synogroup --member "${USER_GROUP}" "${USERNAME}" ${members} > /dev/null
+
+	# Set correct home dir and shell
+	sed -i "s:^\(${USERNAME/./\\.}\:.\+\:\)[^\:]\+\:/sbin/nologin\$:\1${HOME_DIR//:/\:}\:/bin/ash:" /etc/passwd
+
+	# Create home dir
+	rmdir "/var/services/homes/${USERNAME}"
+	cp -R /etc/rs-skel "${HOME_DIR}"
+	chmod 0700 "${HOME_DIR}"
+	chown -R "${USERNAME}:${GROUPNAME}" "${HOME_DIR}"
+
+# "Normal" Linux systems
+else
+	# Create group if it does not exist
+	if ! grep -q "^${USER_GROUP}:" /etc/group; then
+		groupadd "${USER_GROUP}"
+	fi
+	useradd -G "${USER_GROUP}" -b "${BACKUP_ROOT}" -m -k /etc/rs-skel -p '*' -s /bin/bash -c "rs-backup user" "${local_username}"
+fi
+
+rs-update-passwd
+
+if $SET_QUOTA; then
+	rs-setquota "${local_username}"
+fi
+
+# Generate config files from templates
+rsync_conf="$(cat /etc/rs-backup/rsync.conf.template)"
+rsnapshot_conf="$(cat /etc/rs-backup/rsnapshot.conf.template)"
+
+rsync_conf=$(eval "cat << EOF
+${rsync_conf}
+EOF")
+
+rsnapshot_conf=$(eval "cat << EOF
+${rsnapshot_conf}
+EOF")
+
+echo "${rsync_conf}" > "${HOME_DIR}/rsync.conf"
+echo "${rsnapshot_conf}" > "${HOME_DIR}/rsnapshot.conf"
+
+# Protect config files
+chown root:root "${HOME_DIR}/rsync.conf"
+chmod 0644 "${HOME_DIR}/rsync.conf"
+chown root:root "${HOME_DIR}/rsnapshot.conf"
+chmod 0644 "${HOME_DIR}/rsnapshot.conf"
+
+# Set permissions for backup directory
+chown -R "${USERNAME}:${GROUPNAME}" "${HOME_DIR}/${FILES_DIR}"
+chmod -R 0755 "${HOME_DIR}/${FILES_DIR}"
+
+# If SSH key file has been specified
+if [ "${ssh_key_file}" != "" ]; then
+	rs-add-ssh-key "${remote_hostname}" "${remote_username}" "${ssh_key_file}"
+fi

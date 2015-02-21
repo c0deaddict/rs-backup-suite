@@ -1,0 +1,48 @@
+#!/bin/sh
+##
+# Copyright (C) 2013-2014 Janek Bevendorff
+# Website: http://www.refining-linux.org/
+# 
+# Add SSH key to a backup user for passwordless login
+# 
+# The MIT License (MIT)
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in
+# all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+# THE SOFTWARE.
+##
+
+if [ "$1" == "" ] || [ "$2" == "" ] || [ "$3" == "" ]; then
+	. rs-version
+	echo "Usage: $(basename $0) <remote host> <remote username> <ssh public key file>"
+	exit
+fi
+
+. /etc/rs-backup/server-config
+
+home_dir="${BACKUP_ROOT}/${1}-${2}"
+
+mkdir -p "${home_dir}/.ssh"
+
+# Add public key to authorized_keys file and restrict shell commands
+echo -n "command=\"/usr/bin/rs-run-ssh-cmd '${home_dir}'\" " >> "${home_dir}/.ssh/authorized_keys"
+cat "$3" >> "${home_dir}/.ssh/authorized_keys"
+
+# Protect SSH config by assigning ownership to root
+chown -R root:root "${home_dir}/.ssh"
+chmod 0755 "${home_dir}/.ssh"
+chmod 0644 "${home_dir}/.ssh/authorized_keys"
