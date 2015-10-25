@@ -45,6 +45,8 @@ _GLOBAL_INCLUSION_PATTERN_FILE="/etc/rs-backup/include-files"
 _FORCED_INCLUSION_PATTERN_FILE=""
 _SKIP_HOME_DIRS=false
 _FORCED_LOG_FILE=""
+_FORCED_LOCK_DIR="/tmp"
+_FORCED_LOCK_FILE="rs-backup.lock"
 _QUIET_MODE=false
 _VERBOSE_MODE=false
 _SHOW_PROGRESS=false
@@ -97,6 +99,8 @@ Options:
                           backed up
  -l, --log-level=NUM      Set log level to NUM (between 0 and 4)
      --log-file=FILE      Set a different log file location
+     --lock-dir           Sets the lock file directory
+     --lock-file          Sets the lock filename
  -f, --force-run          Force rs-backup to run, even if a lock file exists
  -q, --quiet              Don't print any error messages or warnings to the
                           screen (only write to log file)
@@ -466,7 +470,7 @@ parse_cmd_args() {
     args=$(getopt \
         -s sh \
         -o "r:o:nsi:l:fqvph" \
-        -l "remote-host:,remote-user:,push-module:,ssh-options:,rsync-options:,dry-run,no-home-dirs,include-from:,log-level:,log-file:,force-run,quiet,verbose,progress,help" \
+        -l "remote-host:,remote-user:,push-module:,ssh-options:,rsync-options:,dry-run,no-home-dirs,include-from:,log-level:,log-file:,lock-dir:,lock-file:,force-run,quiet,verbose,progress,help" \
         -n "${name}" \
         -- "${@}")
 
@@ -513,6 +517,12 @@ parse_cmd_args() {
                 ! test_file_perms "w" "${2}" && echo "$name: '${2}' is not writeable!" >&2 && exit 1
                 _FORCED_LOG_FILE=$2
                 shift 2 ;;
+            "--lock-dir")
+                _FORCED_LOCK_DIR=$2
+                shift 2 ;;
+            "--lock-file")
+                _FORCED_LOCK_FILE=$2
+                shift 2 ;;
             "-f"|"--force-run")
                 _FORCE_RUN=true
                 shift ;;
@@ -541,7 +551,7 @@ parse_cmd_args() {
 parse_cmd_args "$@"
 
 # Check if a backup is already running
-if [ -f /tmp/rs-backup.lock ] && ! $_FORCE_RUN; then
+if [ -f "$_FORCED_LOCK_DIR/$_FORCED_LOCK_FILE" ] && ! $_FORCE_RUN; then
     write_log 1 "Backup lock file exists. Either a backup is already running or it didn't shut down properly last time."
     write_log 1 "If you're sure no backup is running right now, remove the lock file '/tmp/rs-backup.lock' or use the '--force-run' parameter."
     exit 1
@@ -551,7 +561,7 @@ write_log 4 "No other backup running, ready to start."
 
 # Create lock file
 write_log 4 "Creating lock file..."
-touch /tmp/rs-backup.lock
+touch "$_FORCED_LOCK_DIR/$_FORCED_LOCK_FILE"
 
 # Backup exit code (0 if all backups have finished successfully)
 _exit_code=$?
@@ -585,7 +595,7 @@ if [ $_exit_code -eq 0 ]; then
 fi
 
 write_log 4 "Removing lock file..."
-rm /tmp/rs-backup.lock
+rm "$_FORCED_LOCK_DIR/$_FORCED_LOCK_FILE"
 
 write_log 4 "Done."
 
